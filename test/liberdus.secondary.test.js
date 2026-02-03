@@ -7,6 +7,8 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
   let owner, signer1, signer2, signer3, signer4, recipient, bridgeInCaller, other;
   let signers;
   let chainId;
+  const destinationChainId = BigInt(137);
+  const sourceChainId = BigInt(1);
 
   async function requestAndSignOperation(operationType, target, value, data) {
     const tx = await liberdus.requestOperation(operationType, target, value, data);
@@ -64,12 +66,12 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     // Try to bridge in
     const bridgeInAmount = ethers.parseUnits("1000", 18);
     await expect(
-      liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"))
+      liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"), sourceChainId)
     ).to.be.revertedWith("Bridge in not available in pre-launch");
 
     // Try to bridge out
     await expect(
-      liberdus.connect(recipient).bridgeOut(bridgeInAmount, owner.address, chainId)
+      liberdus.connect(recipient)["bridgeOut(uint256,address,uint256,uint256)"](bridgeInAmount, owner.address, chainId, destinationChainId)
     ).to.be.revertedWith("Bridge out not available in pre-launch");
   });
 
@@ -80,11 +82,11 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
 
     // Bridge in tokens
     const bridgeInAmount = ethers.parseUnits("1000", 18);
-    await liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"));
+    await liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"), sourceChainId);
     expect(await liberdus.balanceOf(recipient.address)).to.equal(bridgeInAmount);
 
     // Bridge out tokens
-    await liberdus.connect(recipient).bridgeOut(bridgeInAmount, owner.address, chainId);
+    await liberdus.connect(recipient)["bridgeOut(uint256,address,uint256,uint256)"](bridgeInAmount, owner.address, chainId, destinationChainId);
     expect(await liberdus.balanceOf(recipient.address)).to.equal(0);
     expect(await liberdus.totalSupply()).to.equal(0);
   });
@@ -95,7 +97,7 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
 
     const bridgeInAmount = ethers.parseUnits("1000", 18);
     await expect(
-      liberdus.connect(owner).bridgeIn(recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"))
+      liberdus.connect(owner)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"), sourceChainId)
     ).to.be.revertedWith("Not authorized to bridge in");
   });
 
@@ -107,16 +109,21 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     const wrongChainId = chainId + BigInt(1);
 
     await expect(
-      liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, bridgeInAmount, wrongChainId, ethers.id("testTxId"))
+      liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, bridgeInAmount, wrongChainId, ethers.id("testTxId"), sourceChainId)
     ).to.be.revertedWith("Invalid chain ID");
 
     // Bridge in with correct chainId
-    await liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"));
+    await liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"), sourceChainId);
 
     // Bridge out with wrong chainId
     await expect(
-      liberdus.connect(recipient).bridgeOut(bridgeInAmount, owner.address, wrongChainId)
+      liberdus.connect(recipient)["bridgeOut(uint256,address,uint256,uint256)"](bridgeInAmount, owner.address, wrongChainId, destinationChainId)
     ).to.be.revertedWith("Invalid chain ID");
+
+    // Bridge out with destinationChainId same as source chainId
+    await expect(
+      liberdus.connect(recipient)["bridgeOut(uint256,address,uint256,uint256)"](bridgeInAmount, owner.address, chainId, chainId)
+    ).to.be.revertedWith("Destination chain must differ from source chain");
   });
 
   it("Should enforce maxBridgeInAmount and cooldown", async function () {
@@ -125,16 +132,16 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     const tooMuch = ethers.parseUnits("10001", 18);
 
     await expect(
-      liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, tooMuch, chainId, ethers.id("testTxId"))
+      liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, tooMuch, chainId, ethers.id("testTxId"), sourceChainId)
     ).to.be.revertedWith("Amount exceeds bridge-in limit");
 
     // Valid bridge-in
     const amount = ethers.parseUnits("1000", 18);
-    await liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, amount, chainId, ethers.id("testTxId"));
+    await liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, amount, chainId, ethers.id("testTxId"), sourceChainId);
 
     // Try again before cooldown
     await expect(
-      liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, amount, chainId, ethers.id("testTxId2"))
+      liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, amount, chainId, ethers.id("testTxId2"), sourceChainId)
     ).to.be.revertedWith("Bridge-in cooldown not met");
   });
 
@@ -143,7 +150,7 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     await requestAndSignOperation(3, bridgeInCaller.address, 0, "0x");
     const bridgeInAmount = ethers.parseUnits("1000", 18);
 
-    await liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"));
+    await liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"), sourceChainId);
 
     await requestAndSignOperation(1, ethers.ZeroAddress, 0, "0x"); // Pause
     await expect(
@@ -231,7 +238,7 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     expect(operationHash).to.not.equal(operationHash2);
   });
 
-  it("Should enforce 3-day operation deadline", async function() {
+  it("Should enforce 3-day operation deadline", async function () {
     const tx = await liberdus.requestOperation(3, bridgeInCaller.address, 0, "0x");
     const receipt = await tx.wait();
     const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
@@ -251,10 +258,28 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     await requestAndSignOperation(0, ethers.ZeroAddress, 0, "0x"); // PostLaunch
     await requestAndSignOperation(3, bridgeInCaller.address, 0, "0x");
     const bridgeInAmount = ethers.parseUnits("1000", 18);
-    await liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"));
+    await liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32,uint256)"](recipient.address, bridgeInAmount, chainId, ethers.id("testTxId"), sourceChainId);
 
     await liberdus.connect(recipient).approve(owner.address, bridgeInAmount);
     await liberdus.connect(owner).transferFrom(recipient.address, owner.address, bridgeInAmount);
     expect(await liberdus.balanceOf(owner.address)).to.equal(bridgeInAmount);
+  });
+
+  it("Should allow bridgeOut and bridgeIn without optional chainId params", async function () {
+    await requestAndSignOperation(0, ethers.ZeroAddress, 0, "0x"); // PostLaunch
+    await requestAndSignOperation(3, bridgeInCaller.address, 0, "0x");
+
+    // Bridge in without sourceChainId
+    const bridgeInAmount = ethers.parseUnits("1000", 18);
+    await liberdus.connect(bridgeInCaller)["bridgeIn(address,uint256,uint256,bytes32)"](
+      recipient.address, bridgeInAmount, chainId, ethers.id("testTxId")
+    );
+    expect(await liberdus.balanceOf(recipient.address)).to.equal(bridgeInAmount);
+
+    // Bridge out without destinationChainId
+    await liberdus.connect(recipient)["bridgeOut(uint256,address,uint256)"](
+      bridgeInAmount, owner.address, chainId
+    );
+    expect(await liberdus.balanceOf(recipient.address)).to.equal(0);
   });
 });
