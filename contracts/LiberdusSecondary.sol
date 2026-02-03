@@ -43,6 +43,7 @@ contract Liberdus is ERC20, Pausable, ReentrancyGuard, Ownable {
 
     address[4] public signers;
     uint256 public constant REQUIRED_SIGNATURES = 3;
+    uint256 public constant DEFAULT_CHAIN_ID = 0; // Reserved for Liberdus Network
     uint256 public immutable chainId;
 
     // Defining events for the contract
@@ -289,13 +290,13 @@ contract Liberdus is ERC20, Pausable, ReentrancyGuard, Ownable {
     }
 
     function bridgeOut(uint256 amount, address targetAddress, uint256 _chainId) public whenNotPaused {
-        bridgeOut(amount, targetAddress, _chainId, 0);
+        bridgeOut(amount, targetAddress, _chainId, DEFAULT_CHAIN_ID);
     }
 
     function bridgeOut(uint256 amount, address targetAddress, uint256 _chainId, uint256 destinationChainId) public whenNotPaused {
         require(!isPreLaunch, "Bridge out not available in pre-launch");
         require(_chainId == chainId, "Invalid chain ID");
-        if (destinationChainId != 0) {
+        if (destinationChainId != DEFAULT_CHAIN_ID) {
             require(destinationChainId != _chainId, "Destination chain must differ from source chain");
         }
         require(amount > 0, "Cannot bridge out zero tokens");
@@ -305,7 +306,7 @@ contract Liberdus is ERC20, Pausable, ReentrancyGuard, Ownable {
     }
 
     function bridgeIn(address to, uint256 amount, uint256 _chainId, bytes32 txId) public onlyBridgeInCaller whenNotPaused {
-        bridgeIn(to, amount, _chainId, txId, 0);
+        bridgeIn(to, amount, _chainId, txId, DEFAULT_CHAIN_ID);
     }
 
     function bridgeIn(address to, uint256 amount, uint256 _chainId, bytes32 txId, uint256 sourceChainId) public onlyBridgeInCaller whenNotPaused {
