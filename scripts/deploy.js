@@ -5,7 +5,10 @@ async function main() {
   const [deployer, signer1, signer2, signer3] = await hre.ethers.getSigners();
 
   console.log("Deploying contracts with the account:", deployer.address);
-  console.log("Account balance:", (await deployer.provider.getBalance(deployer.address)).toString());
+  console.log(
+    "Account balance:",
+    (await deployer.provider.getBalance(deployer.address)).toString(),
+  );
 
   // Get chainId from the network
   const chainId = (await hre.ethers.provider.getNetwork()).chainId;
@@ -18,7 +21,7 @@ async function main() {
       deployer.address,
       signer1.address,
       signer2.address,
-      signer3.address
+      signer3.address,
     ];
   } else {
     // Use configured signers for production networks

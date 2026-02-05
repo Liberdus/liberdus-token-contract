@@ -31,7 +31,7 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     signers = [owner, signer1, signer2, signer3];
     chainId = BigInt((await ethers.provider.getNetwork()).chainId);
 
-    const Liberdus = await ethers.getContractFactory("Liberdus");
+    const Liberdus = await ethers.getContractFactory("LiberdusSecondary");
     liberdus = await Liberdus.deploy([owner.address, signer1.address, signer2.address, signer3.address], chainId);
     await liberdus.waitForDeployment();
   });
@@ -227,7 +227,7 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
 
     // Deploy on different chain id
     const differentChainId = chainId + BigInt(1);
-    const Liberdus2 = await ethers.getContractFactory("Liberdus");
+    const Liberdus2 = await ethers.getContractFactory("LiberdusSecondary");
     const liberdus2 = await Liberdus2.deploy(
       [owner.address, signer1.address, signer2.address, signer3.address],
       differentChainId

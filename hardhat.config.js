@@ -13,7 +13,7 @@ module.exports = {
   defaultNetwork: "localhost",
   networks: {
     hardhat: {
-      chainId: 1337,
+      chainId: 31337,
       accounts: {
         mnemonic: process.env.MNEMONIC || "test test test test test test test test test test test junk",
       },
@@ -46,12 +46,18 @@ module.exports = {
       url: process.env.MUMBAI_URL || "https://rpc-amoy.polygon.technology/",
       accounts: [process.env.PRIVATE_KEY].filter(Boolean),
       chainId: 80002
+    },
+    bscTestnet: {
+      url: process.env.BSC_TESTNET_URL || "https://bsc-testnet-dataseed.bnbchain.org",
+      accounts: [process.env.PRIVATE_KEY].filter(Boolean),
+      chainId: 97
     }
   },
   etherscan: {
     apiKey: {
       polygon: process.env.POLYGONSCAN_API_KEY,
-      polygonMumbai: process.env.POLYGONSCAN_API_KEY
+      polygonMumbai: process.env.POLYGONSCAN_API_KEY,
+      bscTestnet: process.env.BSCSCAN_API_KEY
     }
   },
   namedAccounts: {
@@ -63,6 +69,7 @@ module.exports = {
       polygon: [SIGNER_1, SIGNER_2, SIGNER_3, SIGNER_4],
       mumbai: [SIGNER_1, SIGNER_2, SIGNER_3, SIGNER_4],
       amoy: [SIGNER_1, SIGNER_2, SIGNER_3, SIGNER_4],
+      bscTestnet: [SIGNER_1, SIGNER_2, SIGNER_3, SIGNER_4],
     }
   }
 };
