@@ -5,8 +5,8 @@ async function main() {
   const [deployer, signer1, signer2, signer3] = await hre.ethers.getSigners();
 
   // --- CONFIGURATION ---
-  const LIBERDUS_ADDR = process.env.LIBERDUS_ADDR || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-  const LIBERDUS_SEC_ADDR = process.env.LIBERDUS_SEC_ADDR || "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
+  const LIBERDUS_ADDR = process.env.LIBERDUS_TOKEN_ADDRESS || "0xdEA158C0b7d776E432881fD416e0dB982A215745";
+  const LIBERDUS_SEC_ADDR = process.env.LIBERDUS_SECONDARY_ADDRESS || "0x94DDF8bb01Ce5EA0eE471e5FB51A7baE46032C90";
 
   const CHAIN_ID_PRIMARY = 31337;
   const CHAIN_ID_SECONDARY = 31338;

@@ -136,10 +136,6 @@ contract LiberdusSecondary is ERC20, Pausable, ReentrancyGuard, Ownable {
 
         signers = _signers;
         chainId = _chainId;
-
-        // [TOD0] Remove these lines before deploying to production
-        // bridgeInCaller = _signers[0]; //  For development purposes
-        // isPreLaunch = false; // For development purposes
     }
 
     function requestOperation(
