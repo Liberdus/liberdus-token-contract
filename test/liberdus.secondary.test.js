@@ -219,6 +219,66 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     ).to.be.revertedWith("Only signers can submit signatures");
   });
 
+  it("Should allow owner (non-signer) to submit signature for UpdateSigner", async function () {
+    // Deploy a contract where owner is NOT one of the signers
+    const nonOwnerSignerAddresses = [signer1.address, signer2.address, signer3.address, signer4.address];
+    const nonOwnerSigners = [signer1, signer2, signer3, signer4];
+    const liberdusNoOwner = await (await ethers.getContractFactory("LiberdusSecondary")).deploy(nonOwnerSignerAddresses, chainId);
+    await liberdusNoOwner.waitForDeployment();
+
+    // Owner (non-signer) requests to replace signer4 with 'other'
+    const tx = await liberdusNoOwner.connect(owner).requestOperation(
+      OP.UPDATE_SIGNER, signer4.address, BigInt(other.address), "0x"
+    );
+    const receipt = await tx.wait();
+    const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
+
+    // Two registered signers submit first
+    for (let i = 0; i < 2; i++) {
+      const messageHash = await liberdusNoOwner.getOperationHash(operationId);
+      const sig = await nonOwnerSigners[i].signMessage(ethers.getBytes(messageHash));
+      await liberdusNoOwner.connect(nonOwnerSigners[i]).submitSignature(operationId, sig);
+    }
+
+    // Owner (non-signer) submits the 3rd signature — should succeed and execute
+    const messageHash = await liberdusNoOwner.getOperationHash(operationId);
+    const ownerSig = await owner.signMessage(ethers.getBytes(messageHash));
+    await expect(liberdusNoOwner.connect(owner).submitSignature(operationId, ownerSig))
+      .to.emit(liberdusNoOwner, "OperationExecuted");
+
+    expect(await liberdusNoOwner.isSigner(other.address)).to.be.true;
+    expect(await liberdusNoOwner.isSigner(signer4.address)).to.be.false;
+  });
+
+  it("Should not allow owner (non-signer) to submit signature for non-UpdateSigner operations", async function () {
+    // Deploy a contract where owner is NOT one of the signers
+    const nonOwnerSignerAddresses = [signer1.address, signer2.address, signer3.address, signer4.address];
+    const liberdusNoOwner = await (await ethers.getContractFactory("LiberdusSecondary")).deploy(nonOwnerSignerAddresses, chainId);
+    await liberdusNoOwner.waitForDeployment();
+
+    const tx = await liberdusNoOwner.connect(signer1).requestOperation(
+      OP.SET_BRIDGE_IN_CALLER, bridgeInCaller.address, 0, "0x"
+    );
+    const receipt = await tx.wait();
+    const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
+
+    // Owner (non-signer) tries to submit signature for a non-UpdateSigner op — should fail
+    const messageHash = await liberdusNoOwner.getOperationHash(operationId);
+    const ownerSig = await owner.signMessage(ethers.getBytes(messageHash));
+    await expect(
+      liberdusNoOwner.connect(owner).submitSignature(operationId, ownerSig)
+    ).to.be.revertedWith("Only signers can submit signatures");
+  });
+
+  it("Should revert when submitting signature for a non-existent operation", async function () {
+    const fakeOperationId = ethers.keccak256(ethers.toUtf8Bytes("nonexistent"));
+    const messageHash = await liberdus.getOperationHash(fakeOperationId);
+    const signature = await signers[0].signMessage(ethers.getBytes(messageHash));
+    await expect(
+      liberdus.connect(signers[0]).submitSignature(fakeOperationId, signature)
+    ).to.be.revertedWith("Operation does not exist");
+  });
+
   it("Should include chainId in operation hash", async function () {
     const operationType = OP.SET_BRIDGE_IN_CALLER;
     const target = bridgeInCaller.address;
