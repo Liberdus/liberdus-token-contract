@@ -301,6 +301,67 @@ describe("Vault", function () {
       expect(await vault.isSigner(oldSigner.address)).to.be.false;
     });
 
+    it("Should allow owner (non-signer) to submit signature for UpdateSigner", async function () {
+      // Deploy a vault where owner is NOT one of the signers
+      const nonOwnerSignerAddresses = [signer1.address, signer2.address, signer3.address, signer4.address];
+      const nonOwnerSigners = [signer1, signer2, signer3, signer4];
+      const vaultNoOwner = await Vault.deploy(await liberdus.getAddress(), nonOwnerSignerAddresses, chainId);
+      await vaultNoOwner.waitForDeployment();
+
+      // Owner (non-signer) requests to replace signer4 with 'other'
+      const tx = await vaultNoOwner.connect(owner).requestOperation(
+        OP.UPDATE_SIGNER, signer4.address, BigInt(other.address), "0x"
+      );
+      const receipt = await tx.wait();
+      const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
+
+      // Two registered signers submit first
+      for (let i = 0; i < 2; i++) {
+        const messageHash = await vaultNoOwner.getOperationHash(operationId);
+        const sig = await nonOwnerSigners[i].signMessage(ethers.getBytes(messageHash));
+        await vaultNoOwner.connect(nonOwnerSigners[i]).submitSignature(operationId, sig);
+      }
+
+      // Owner (non-signer) submits the 3rd signature — should succeed and execute
+      const messageHash = await vaultNoOwner.getOperationHash(operationId);
+      const ownerSig = await owner.signMessage(ethers.getBytes(messageHash));
+      await expect(vaultNoOwner.connect(owner).submitSignature(operationId, ownerSig))
+        .to.emit(vaultNoOwner, "OperationExecuted");
+
+      expect(await vaultNoOwner.isSigner(other.address)).to.be.true;
+      expect(await vaultNoOwner.isSigner(signer4.address)).to.be.false;
+    });
+
+    it("Should not allow owner (non-signer) to submit signature for non-UpdateSigner operations", async function () {
+      // Deploy a vault where owner is NOT one of the signers
+      const nonOwnerSignerAddresses = [signer1.address, signer2.address, signer3.address, signer4.address];
+      const vaultNoOwner = await Vault.deploy(await liberdus.getAddress(), nonOwnerSignerAddresses, chainId);
+      await vaultNoOwner.waitForDeployment();
+
+      const newMaxAmount = ethers.parseUnits("20000", 18);
+      const tx = await vaultNoOwner.connect(signer1).requestOperation(
+        OP.SET_BRIDGE_OUT_AMOUNT, ethers.ZeroAddress, newMaxAmount, "0x"
+      );
+      const receipt = await tx.wait();
+      const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
+
+      // Owner (non-signer) tries to submit signature for a non-UpdateSigner op — should fail
+      const messageHash = await vaultNoOwner.getOperationHash(operationId);
+      const ownerSig = await owner.signMessage(ethers.getBytes(messageHash));
+      await expect(
+        vaultNoOwner.connect(owner).submitSignature(operationId, ownerSig)
+      ).to.be.revertedWith("Only signers can submit signatures");
+    });
+
+    it("Should revert when submitting signature for a non-existent operation", async function () {
+      const fakeOperationId = ethers.keccak256(ethers.toUtf8Bytes("nonexistent"));
+      const messageHash = await vault.getOperationHash(fakeOperationId);
+      const signature = await signers[0].signMessage(ethers.getBytes(messageHash));
+      await expect(
+        vault.connect(signers[0]).submitSignature(fakeOperationId, signature)
+      ).to.be.revertedWith("Operation does not exist");
+    });
+
     it("Should require three signatures", async function () {
       const newMaxAmount = ethers.parseUnits("25000", 18);
       const tx = await vault.requestOperation(OP.SET_BRIDGE_OUT_AMOUNT, ethers.ZeroAddress, newMaxAmount, "0x");

@@ -169,11 +169,18 @@ contract Vault is ReentrancyGuard, Ownable {
     }
 
     function submitSignature(bytes32 operationId, bytes memory signature) public whenNotHalted {
-        require(isSigner(msg.sender), "Only signers can submit signatures");
         Operation storage op = operations[operationId];
+        // deadline is always set on creation; a zero value means the operationId was never registered
+        require(op.deadline != 0, "Operation does not exist");
         require(!op.executed, "Operation already executed");
         require(!op.signatures[msg.sender], "Signature already submitted");
         require(block.timestamp <= op.deadline, "Operation deadline passed");
+
+        if (op.opType == OperationType.UpdateSigner) {
+            require(isSigner(msg.sender) || owner() == msg.sender, "Only signers or owner can submit signatures");
+        } else {
+            require(isSigner(msg.sender), "Only signers can submit signatures");
+        }
 
         bytes32 messageHash = getOperationHash(operationId);
         // Add Ethereum Signed Message prefix
@@ -183,10 +190,7 @@ contract Vault is ReentrancyGuard, Ownable {
         require(signer == msg.sender, "Signature signer must be message sender");
 
         if (op.opType == OperationType.UpdateSigner) {
-            require(isSigner(signer) || signer == owner(), "Invalid signature for UpdateSigner");
             require(signer != op.target, "Signer being replaced cannot approve");
-        } else {
-            require(isSigner(signer), "Invalid signature");
         }
 
         require(op.numSignatures < REQUIRED_SIGNATURES, "Enough signatures already");

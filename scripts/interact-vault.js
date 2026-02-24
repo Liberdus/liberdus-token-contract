@@ -30,7 +30,7 @@ async function requestAndSignOperation(contract, signers, operationType, target,
 async function main() {
   const VAULT_ADDRESS = process.env.VAULT_ADDRESS;
   const LIBERDUS_ADDRESS = process.env.LIBERDUS_TOKEN_ADDRESS;
-  const ACTION = process.env.ACTION || "balance"; // balance, bridgeOut, relinquish, setBridgeOutAmount, setBridgeOutEnabled
+  const ACTION = process.env.ACTION || "balance"; // balance, bridgeOut, relinquish, setBridgeOutAmount, setBridgeOutEnabled, updateSigner
 
   if (!VAULT_ADDRESS) {
     throw new Error("Set VAULT_ADDRESS in your .env file");
@@ -161,7 +161,55 @@ async function main() {
     return;
   }
 
-  console.error(`Unknown action: ${ACTION}. Use one of: balance, bridgeOut, setBridgeOutAmount, setBridgeOutEnabled, relinquish`);
+  // --- UPDATE SIGNER ---
+  if (ACTION === "updateSigner") {
+    const OLD_SIGNER = process.env.OLD_SIGNER;
+    const NEW_SIGNER = process.env.NEW_SIGNER;
+
+    if (!OLD_SIGNER || !ethers.isAddress(OLD_SIGNER)) {
+      throw new Error("Set a valid OLD_SIGNER address in your .env file");
+    }
+    if (!NEW_SIGNER || !ethers.isAddress(NEW_SIGNER)) {
+      throw new Error("Set a valid NEW_SIGNER address in your .env file");
+    }
+
+    // For UpdateSigner, the contract owner may also submit a signature.
+    // Exclude the signer being replaced from the eligible set; keep owner if not already present.
+    const oldSignerLower = OLD_SIGNER.toLowerCase();
+    const eligibleSigners = signers.filter(s => s.address.toLowerCase() !== oldSignerLower);
+
+    // If owner is not already in the signers array (i.e. owner is not a registered signer),
+    // prepend them so they can co-sign as the 3rd signature.
+    const ownerInSigners = eligibleSigners.some(s => s.address.toLowerCase() === deployer.address.toLowerCase());
+    if (!ownerInSigners) {
+      eligibleSigners.unshift(deployer);
+    }
+
+    if (eligibleSigners.length < 3) {
+      throw new Error("Not enough eligible signers. Need at least 3 (excluding the signer being replaced).");
+    }
+
+    console.log(`\nRequesting UpdateSigner: ${OLD_SIGNER} -> ${NEW_SIGNER}`);
+    const tx = await vault.connect(deployer).requestOperation(OP.UPDATE_SIGNER, OLD_SIGNER, BigInt(NEW_SIGNER), "0x");
+    const receipt = await tx.wait();
+    const operationId = receipt.logs.find(log => log.fragment && log.fragment.name === 'OperationRequested').args.operationId;
+    console.log(`  Operation requested: ${operationId}`);
+
+    for (let i = 0; i < 3; i++) {
+      const signer = eligibleSigners[i];
+      const messageHash = await vault.getOperationHash(operationId);
+      const signature = await signer.signMessage(ethers.getBytes(messageHash));
+      await vault.connect(signer).submitSignature(operationId, signature);
+      console.log(`  Signature ${i + 1}/3 submitted by ${signer.address}`);
+    }
+
+    console.log(`  Operation executed.`);
+    console.log(`  New signer active: ${await vault.isSigner(NEW_SIGNER)}`);
+    console.log(`  Old signer removed: ${!(await vault.isSigner(OLD_SIGNER))}`);
+    return;
+  }
+
+  console.error(`Unknown action: ${ACTION}. Use one of: balance, bridgeOut, setBridgeOutAmount, setBridgeOutEnabled, relinquish, updateSigner`);
 }
 
 main()
