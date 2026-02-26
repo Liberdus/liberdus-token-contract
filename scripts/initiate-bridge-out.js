@@ -1,6 +1,9 @@
 const hre = require("hardhat");
 const { ethers } = hre;
 
+// Flag to control whether to notify the coordinator after a successful bridge out
+const NOTIFY_COORDINATOR = process.env.NOTIFY_COORDINATOR === "true" || false;
+
 async function main() {
   const CONTRACT_TYPE = (process.env.CONTRACT_TYPE || "SECONDARY").toUpperCase();
   let CONTRACT_ADDRESS;
@@ -104,6 +107,26 @@ async function main() {
 
   const receipt = await tx.wait();
   console.log("Transaction hash:", receipt.hash);
+
+  if (NOTIFY_COORDINATOR) {
+    try {
+      const coordinatorUrl = process.env.COORDINATOR_URL || "http://127.0.0.1:8000";
+      console.log(`Notifying coordinator at ${coordinatorUrl}...`);
+      const response = await fetch(`${coordinatorUrl}/notify-bridgeout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chainId: Number(chainId) }),
+      });
+      if (!response.ok) {
+        console.warn(`Coordinator returned status ${response.status}`);
+      } else {
+        const data = await response.json();
+        console.log("Coordinator response:", data);
+      }
+    } catch (err) {
+      console.error("Failed to notify coordinator:", err.message);
+    }
+  }
 
   const newBalance = CONTRACT_TYPE === "VAULT"
     ? await tokenContract.balanceOf(deployer.address)

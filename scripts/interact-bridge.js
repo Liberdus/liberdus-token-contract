@@ -1,6 +1,9 @@
 const hre = require("hardhat");
 const { ethers } = hre;
 
+// Flag to control whether to notify the coordinator after a successful bridge out
+const NOTIFY_COORDINATOR = process.env.NOTIFY_COORDINATOR === "true" || false;
+
 async function main() {
   const [deployer, signer1, signer2, signer3] = await hre.ethers.getSigners();
 
@@ -74,6 +77,27 @@ async function main() {
 
   function buildTxId(routeName) {
     return ethers.id(`${routeName}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`);
+  }
+
+  async function notifyCoordinator(chainId) {
+    if (!NOTIFY_COORDINATOR) return;
+    try {
+      const coordinatorUrl = process.env.COORDINATOR_URL || "http://127.0.0.1:8000";
+      console.log(`Notifying coordinator at ${coordinatorUrl} for chain ${chainId}...`);
+      const response = await fetch(`${coordinatorUrl}/notify-bridgeout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chainId: Number(chainId) }),
+      });
+      if (!response.ok) {
+        console.warn(`Coordinator returned status ${response.status}`);
+      } else {
+        const data = await response.json();
+        console.log("Coordinator response:", data);
+      }
+    } catch (err) {
+      console.error("Failed to notify coordinator:", err.message);
+    }
   }
 
   async function ensureBridgeInReady(contract, label) {
@@ -170,6 +194,7 @@ async function main() {
       vaultBridgeOutDone = true;
       vaultBridgeOutTxId = receipt.hash;
       console.log("Vault bridgeOut successful.");
+      await notifyCoordinator(CHAIN_ID_PRIMARY);
       console.log(`Signer 1 Primary Remaining: ${ethers.formatUnits(await liberdus.balanceOf(signer1.address), 18)} LIB`);
       console.log(`Vault Locked Balance: ${ethers.formatUnits(await vault.getVaultBalance(), 18)} LIB`);
     } else {
@@ -215,6 +240,7 @@ async function main() {
       primaryBridgeOutDone = true;
       primaryBridgeOutTxId = receipt.hash;
       console.log("Primary bridgeOut successful.");
+      await notifyCoordinator(CHAIN_ID_PRIMARY);
       console.log(`Signer 2 Primary Remaining: ${ethers.formatUnits(await liberdus.balanceOf(signer2.address), 18)} LIB`);
     } else {
       console.log(`Skipping Primary bridgeOut: signer2 needs at least ${ethers.formatUnits(primaryToSecondaryAmount, 18)} LIB.`);
@@ -264,6 +290,7 @@ async function main() {
       secondaryBridgeOutDone = true;
       secondaryBridgeOutTxId = receipt.hash;
       console.log("Secondary bridgeOut successful.");
+      await notifyCoordinator(CHAIN_ID_SECONDARY);
       console.log(`Signer 3 Secondary Remaining: ${ethers.formatUnits(await liberdusSecondary.balanceOf(signer3.address), 18)} LIB`);
     } else {
       console.log(`Skipping Secondary bridgeOut: signer3 needs at least ${ethers.formatUnits(secondaryToPrimaryAmount, 18)} LIB.`);

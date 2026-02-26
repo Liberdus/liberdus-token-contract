@@ -1,5 +1,9 @@
 const hre = require("hardhat");
 const { ethers } = hre;
+
+// Flag to control whether to notify the coordinator after a successful bridge out
+const NOTIFY_COORDINATOR = process.env.NOTIFY_COORDINATOR === "true" || false;
+
 const OP = Object.freeze({
   SET_BRIDGE_OUT_AMOUNT: 0,
   UPDATE_SIGNER: 1,
@@ -99,6 +103,26 @@ async function main() {
     const tx = await vault.connect(deployer).bridgeOut(amount, targetAddress, chainId);
     const receipt = await tx.wait();
     console.log("Transaction hash:", receipt.hash);
+
+    if (NOTIFY_COORDINATOR) {
+      try {
+        const coordinatorUrl = process.env.COORDINATOR_URL || "http://127.0.0.1:8000";
+        console.log(`Notifying coordinator at ${coordinatorUrl}...`);
+        const response = await fetch(`${coordinatorUrl}/notify-bridgeout`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chainId: Number(chainId) }),
+        });
+        if (!response.ok) {
+          console.warn(`Coordinator returned status ${response.status}`);
+        } else {
+          const data = await response.json();
+          console.log("Coordinator response:", data);
+        }
+      } catch (err) {
+        console.error("Failed to notify coordinator:", err.message);
+      }
+    }
 
     const newBalance = await liberdus.balanceOf(deployer.address);
     console.log(`New Balance: ${ethers.formatUnits(newBalance, 18)} LIB`);

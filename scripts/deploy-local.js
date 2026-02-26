@@ -1,6 +1,10 @@
 const hre = require("hardhat");
 const { ZeroAddress } = require("hardhat").ethers;
 const { ethers } = hre;
+
+// Flag to control whether to notify the coordinator after a successful bridge out
+const NOTIFY_COORDINATOR = process.env.NOTIFY_COORDINATOR === "true" || false;
+
 const PRIMARY_OP = Object.freeze({
   MINT: 0,
   POST_LAUNCH: 2,
@@ -90,6 +94,27 @@ async function main() {
     }
   }
 
+  async function notifyCoordinator(chainId) {
+    if (!NOTIFY_COORDINATOR) return;
+    try {
+      const coordinatorUrl = process.env.COORDINATOR_URL || "http://127.0.0.1:8000";
+      console.log(`Notifying coordinator at ${coordinatorUrl} for chain ${chainId}...`);
+      const response = await fetch(`${coordinatorUrl}/notify-bridgeout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chainId: Number(chainId) }),
+      });
+      if (!response.ok) {
+        console.warn(`Coordinator returned status ${response.status}`);
+      } else {
+        const data = await response.json();
+        console.log("Coordinator response:", data);
+      }
+    } catch (err) {
+      console.error("Failed to notify coordinator:", err.message);
+    }
+  }
+
   // ====================================================
   // 1. DEPLOY LIBERDUS (PRIMARY)
   // ====================================================
@@ -164,6 +189,7 @@ async function main() {
   console.log(`Bridging out ${ethers.formatUnits(bridgeAmount, 18)} LIB via Vault...`);
   const vaultBridgeOutTx = await vault.connect(deployer).bridgeOut(bridgeAmount, deployer.address, CHAIN_ID_PRIMARY);
   const vaultBridgeOutReceipt = await vaultBridgeOutTx.wait();
+  await notifyCoordinator(CHAIN_ID_PRIMARY);
 
   console.log("Primary Balance:", ethers.formatUnits(await liberdus.balanceOf(deployer.address), 18));
   console.log("Vault Balance:", ethers.formatUnits(await vault.getVaultBalance(), 18));
@@ -207,6 +233,7 @@ async function main() {
   console.log(`\n[Primary -> Secondary] Bridging out ${ethers.formatUnits(p2sBridgeAmount, 18)} LIB from Primary...`);
   const p2sBridgeOutTx = await liberdus.connect(deployer).bridgeOut(p2sBridgeAmount, deployer.address, CHAIN_ID_PRIMARY);
   const p2sBridgeOutReceipt = await p2sBridgeOutTx.wait();
+  await notifyCoordinator(CHAIN_ID_PRIMARY);
   console.log("Primary Balance:", ethers.formatUnits(await liberdus.balanceOf(deployer.address), 18));
 
   console.log(`[Primary -> Secondary] Bridging in ${ethers.formatUnits(p2sBridgeAmount, 18)} LIB to Secondary...`);
@@ -219,6 +246,7 @@ async function main() {
   console.log(`\n[Secondary -> Primary] Bridging out ${ethers.formatUnits(s2pBridgeAmount, 18)} LIB from Secondary...`);
   const s2pBridgeOutTx = await liberdusSecondary.connect(deployer).bridgeOut(s2pBridgeAmount, deployer.address, CHAIN_ID_SECONDARY);
   const s2pBridgeOutReceipt = await s2pBridgeOutTx.wait();
+  await notifyCoordinator(CHAIN_ID_SECONDARY);
   console.log("Secondary Balance:", ethers.formatUnits(await liberdusSecondary.balanceOf(deployer.address), 18));
 
   console.log(`[Secondary -> Primary] Bridging in ${ethers.formatUnits(s2pBridgeAmount, 18)} LIB to Primary...`);
