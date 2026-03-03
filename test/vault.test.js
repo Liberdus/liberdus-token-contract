@@ -405,6 +405,26 @@ describe("Vault", function () {
         requestAndSignOperation(vault, OP.SET_BRIDGE_OUT_ENABLED, ethers.ZeroAddress, 0, enabledData)
       ).to.be.revertedWith("Bridge-out status already set");
     });
+
+    it("Should prevent cross-contract operationId replay (address(this) in operationId)", async function () {
+      // Deploy a second vault with the same signers and same chainId
+      const vault2 = await Vault.deploy(await liberdus.getAddress(), signerAddresses, chainId);
+      await vault2.waitForDeployment();
+
+      // Request operation on vault 1
+      const newMaxAmount = ethers.parseUnits("20000", 18);
+      const tx = await vault.requestOperation(OP.SET_BRIDGE_OUT_AMOUNT, ethers.ZeroAddress, newMaxAmount, "0x");
+      const receipt = await tx.wait();
+      const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
+
+      // The same operationId does not exist on vault2 (different address(this) → different hash)
+      // Trying to submit a signature on vault2 using that operationId should fail
+      const messageHash = await vault.getOperationHash(operationId);
+      const signature = await signers[0].signMessage(ethers.getBytes(messageHash));
+      await expect(
+        vault2.connect(signers[0]).submitSignature(operationId, signature)
+      ).to.be.revertedWith("Operation does not exist");
+    });
   });
 
   describe("Helper Functions", function () {

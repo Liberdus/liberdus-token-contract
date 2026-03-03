@@ -101,11 +101,6 @@ contract Vault is ReentrancyGuard, Ownable {
 
     event VaultHalted(uint256 timestamp);
 
-    modifier onlySigner() {
-        require(isSigner(msg.sender), "Not a signer");
-        _;
-    }
-
     modifier whenNotHalted() {
         require(!halted, "Vault is permanently halted");
         _;
@@ -145,7 +140,7 @@ contract Vault is ReentrancyGuard, Ownable {
         }
 
         uint256 deadline = block.timestamp + OPERATION_DEADLINE;
-        bytes32 operationId = keccak256(abi.encodePacked(operationCount++, opType, target, value, data, chainId));
+        bytes32 operationId = keccak256(abi.encodePacked(operationCount++, opType, target, value, data, chainId, address(this)));
         Operation storage op = operations[operationId];
         op.opType = opType;
         op.target = target;
@@ -175,6 +170,7 @@ contract Vault is ReentrancyGuard, Ownable {
         require(!op.executed, "Operation already executed");
         require(!op.signatures[msg.sender], "Signature already submitted");
         require(block.timestamp <= op.deadline, "Operation deadline passed");
+        require(op.numSignatures < REQUIRED_SIGNATURES, "Enough signatures already");
 
         if (op.opType == OperationType.UpdateSigner) {
             require(isSigner(msg.sender) || owner() == msg.sender, "Only signers or owner can submit signatures");
@@ -192,8 +188,6 @@ contract Vault is ReentrancyGuard, Ownable {
         if (op.opType == OperationType.UpdateSigner) {
             require(signer != op.target, "Signer being replaced cannot approve");
         }
-
-        require(op.numSignatures < REQUIRED_SIGNATURES, "Enough signatures already");
 
         op.signatures[signer] = true;
         op.numSignatures++;
