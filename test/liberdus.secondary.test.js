@@ -304,6 +304,28 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     expect(operationHash).to.not.equal(operationHash2);
   });
 
+  it("Should prevent cross-contract operationId replay (address(this) in operationId)", async function () {
+    // Deploy a second contract with the same signers and same chainId
+    const liberdus2 = await (await ethers.getContractFactory("LiberdusSecondary")).deploy(
+      [owner.address, signer1.address, signer2.address, signer3.address],
+      chainId
+    );
+    await liberdus2.waitForDeployment();
+
+    // Request operation on contract 1
+    const tx = await liberdus.requestOperation(OP.SET_BRIDGE_IN_CALLER, bridgeInCaller.address, 0, "0x");
+    const receipt = await tx.wait();
+    const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
+
+    // The same operationId does not exist on contract 2 (different address(this) → different hash)
+    // Trying to submit a signature on contract 2 using that operationId should fail
+    const messageHash = await liberdus.getOperationHash(operationId);
+    const signature = await signers[0].signMessage(ethers.getBytes(messageHash));
+    await expect(
+      liberdus2.connect(signers[0]).submitSignature(operationId, signature)
+    ).to.be.revertedWith("Operation does not exist");
+  });
+
   it("Should enforce 3-day operation deadline", async function () {
     const tx = await liberdus.requestOperation(OP.SET_BRIDGE_IN_CALLER, bridgeInCaller.address, 0, "0x");
     const receipt = await tx.wait();
