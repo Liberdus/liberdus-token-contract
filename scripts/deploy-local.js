@@ -14,6 +14,7 @@ const PRIMARY_OP = Object.freeze({
 const SECONDARY_OP = Object.freeze({
   SET_BRIDGE_IN_CALLER: 0,
   SET_BRIDGE_OUT_ENABLED: 4,
+  SET_MIN_BRIDGE_OUT_AMOUNT: 5,
 });
 
 async function main() {

@@ -13,6 +13,7 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     UPDATE_SIGNER: 2,
     SET_BRIDGE_IN_ENABLED: 3,
     SET_BRIDGE_OUT_ENABLED: 4,
+    SET_MIN_BRIDGE_OUT_AMOUNT: 5,
   });
 
   async function requestAndSignOperation(operationType, target, value, data) {
@@ -34,6 +35,10 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
   async function setBridgeOutEnabled(enabled) {
     const encoded = ethers.AbiCoder.defaultAbiCoder().encode(["bool"], [enabled]);
     await requestAndSignOperation(OP.SET_BRIDGE_OUT_ENABLED, ethers.ZeroAddress, 0, encoded);
+  }
+
+  async function setMinBridgeOutAmount(amount) {
+    await requestAndSignOperation(OP.SET_MIN_BRIDGE_OUT_AMOUNT, ethers.ZeroAddress, amount, "0x");
   }
 
   beforeEach(async function () {
@@ -396,6 +401,63 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
 
     await liberdus.connect(recipient).bridgeOut(ethers.parseUnits("1000", 18), owner.address, chainId);
     expect(await liberdus.balanceOf(recipient.address)).to.equal(0);
+  });
+
+  it("Should set minBridgeOutAmount via multisig", async function () {
+    const newMin = ethers.parseUnits("10", 18);
+    await setMinBridgeOutAmount(newMin);
+    expect(await liberdus.minBridgeOutAmount()).to.equal(newMin);
+  });
+
+  it("Should reject bridgeOut amounts below minBridgeOutAmount", async function () {
+    await requestAndSignOperation(OP.SET_BRIDGE_IN_CALLER, bridgeInCaller.address, 0, "0x");
+    await setBridgeOutEnabled(true);
+
+    const minAmount = ethers.parseUnits("50", 18);
+    await setMinBridgeOutAmount(minAmount);
+
+    const bridgedAmount = ethers.parseUnits("100", 18);
+    await liberdus.connect(bridgeInCaller).bridgeIn(recipient.address, bridgedAmount, chainId, ethers.id("testTxId"));
+
+    await expect(
+      liberdus.connect(recipient).bridgeOut(ethers.parseUnits("49", 18), owner.address, chainId)
+    ).to.be.revertedWith("Amount below minimum bridge-out amount");
+
+    // Exactly at minimum should succeed
+    await liberdus.connect(recipient).bridgeOut(minAmount, owner.address, chainId);
+    expect(await liberdus.balanceOf(recipient.address)).to.equal(bridgedAmount - minAmount);
+  });
+
+  it("Should revert no-op minBridgeOutAmount update", async function () {
+    const currentMin = await liberdus.minBridgeOutAmount();
+    await expect(
+      requestAndSignOperation(OP.SET_MIN_BRIDGE_OUT_AMOUNT, ethers.ZeroAddress, currentMin, "0x")
+    ).to.be.revertedWith("Min bridge-out amount already set");
+  });
+
+  it("Should revert minBridgeOutAmount update with zero", async function () {
+    await expect(
+      requestAndSignOperation(OP.SET_MIN_BRIDGE_OUT_AMOUNT, ethers.ZeroAddress, 0, "0x")
+    ).to.be.revertedWith("Min amount must be greater than zero");
+  });
+
+  it("Should emit MinBridgeOutAmountUpdated event", async function () {
+    const newMin = ethers.parseUnits("25", 18);
+    const tx = await liberdus.requestOperation(OP.SET_MIN_BRIDGE_OUT_AMOUNT, ethers.ZeroAddress, newMin, "0x");
+    const receipt = await tx.wait();
+    const operationId = receipt.logs.find(log => log.fragment.name === 'OperationRequested').args.operationId;
+
+    for (let i = 0; i < 2; i++) {
+      const messageHash = await liberdus.getOperationHash(operationId);
+      const signature = await signers[i].signMessage(ethers.getBytes(messageHash));
+      await liberdus.connect(signers[i]).submitSignature(operationId, signature);
+    }
+
+    const messageHash = await liberdus.getOperationHash(operationId);
+    const signature = await signers[2].signMessage(ethers.getBytes(messageHash));
+    await expect(liberdus.connect(signers[2]).submitSignature(operationId, signature))
+      .to.emit(liberdus, "MinBridgeOutAmountUpdated");
+    expect(await liberdus.minBridgeOutAmount()).to.equal(newMin);
   });
 
   it("Should revert no-op bridge flag updates", async function () {

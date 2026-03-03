@@ -14,7 +14,8 @@ contract LiberdusSecondary is ERC20, ReentrancyGuard, Ownable {
         SetBridgeInLimits,
         UpdateSigner,
         SetBridgeInEnabled,
-        SetBridgeOutEnabled
+        SetBridgeOutEnabled,
+        SetMinBridgeOutAmount
     }
 
     struct Operation {
@@ -36,6 +37,7 @@ contract LiberdusSecondary is ERC20, ReentrancyGuard, Ownable {
 
     address public bridgeInCaller;
     uint256 public maxBridgeInAmount = 10_000 * 10**18;
+    uint256 public minBridgeOutAmount = 1 * 10**18;
     uint256 public bridgeInCooldown = 1 minutes;
     uint256 public lastBridgeInTime;
     bool public bridgeInEnabled = true;
@@ -115,6 +117,12 @@ contract LiberdusSecondary is ERC20, ReentrancyGuard, Ownable {
     event BridgeOutStatusUpdated(
         bytes32 indexed operationId,
         bool enabled,
+        uint256 timestamp
+    );
+
+    event MinBridgeOutAmountUpdated(
+        bytes32 indexed operationId,
+        uint256 newMinAmount,
         uint256 timestamp
     );
 
@@ -229,6 +237,8 @@ contract LiberdusSecondary is ERC20, ReentrancyGuard, Ownable {
             _executeSetBridgeInEnabled(operationId, abi.decode(op.data, (bool)));
         } else if (op.opType == OperationType.SetBridgeOutEnabled) {
             _executeSetBridgeOutEnabled(operationId, abi.decode(op.data, (bool)));
+        } else if (op.opType == OperationType.SetMinBridgeOutAmount) {
+            _executeSetMinBridgeOutAmount(operationId, op.value);
         } else {
             revert("Unknown operation type");
         }
@@ -290,10 +300,18 @@ contract LiberdusSecondary is ERC20, ReentrancyGuard, Ownable {
         emit BridgeOutStatusUpdated(operationId, enabled, block.timestamp);
     }
 
+    function _executeSetMinBridgeOutAmount(bytes32 operationId, uint256 newMinAmount) internal {
+        require(newMinAmount > 0, "Min amount must be greater than zero");
+        require(newMinAmount != minBridgeOutAmount, "Min bridge-out amount already set");
+        minBridgeOutAmount = newMinAmount;
+        emit MinBridgeOutAmountUpdated(operationId, newMinAmount, block.timestamp);
+    }
+
     function bridgeOut(uint256 amount, address targetAddress, uint256 _chainId) public {
         require(bridgeOutEnabled, "Bridge-out disabled");
         require(_chainId == chainId, "Invalid chain ID");
         require(amount > 0, "Cannot bridge out zero tokens");
+        require(amount >= minBridgeOutAmount, "Amount below minimum bridge-out amount");
         require(amount <= maxBridgeInAmount, "Amount exceeds bridge-in limit");
         require(amount <= balanceOf(msg.sender), "Insufficient balance");
         _burn(msg.sender, amount);
