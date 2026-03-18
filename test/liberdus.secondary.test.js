@@ -157,7 +157,7 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
     ).to.be.revertedWith("Transaction already processed");
   });
 
-  it("Should reject bridgeOut amounts above maxBridgeInAmount", async function () {
+  it("Should allow bridgeOut amounts above maxBridgeInAmount", async function () {
     await requestAndSignOperation(OP.SET_BRIDGE_IN_CALLER, bridgeInCaller.address, 0, "0x");
     await setBridgeOutEnabled(true);
 
@@ -170,7 +170,8 @@ describe("Liberdus (Secondary Bridge Contract)", function () {
 
     await expect(
       liberdus.connect(recipient).bridgeOut(bridgedAmount, owner.address, chainId)
-    ).to.be.revertedWith("Amount exceeds bridge-in limit");
+    ).to.not.be.reverted;
+    expect(await liberdus.balanceOf(recipient.address)).to.equal(0);
   });
 
   it("Should require three signatures for multisig operations", async function () {

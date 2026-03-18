@@ -312,7 +312,6 @@ contract LiberdusSecondary is ERC20, ReentrancyGuard, Ownable {
         require(_chainId == chainId, "Invalid chain ID");
         require(amount > 0, "Cannot bridge out zero tokens");
         require(amount >= minBridgeOutAmount, "Amount below minimum bridge-out amount");
-        require(amount <= maxBridgeInAmount, "Amount exceeds bridge-in limit");
         require(amount <= balanceOf(msg.sender), "Insufficient balance");
         _burn(msg.sender, amount);
         emit BridgedOut(msg.sender, amount, targetAddress, _chainId, block.timestamp);

@@ -17,6 +17,10 @@ module.exports = {
       accounts: {
         mnemonic: process.env.MNEMONIC || "test test test test test test test test test test test junk",
       },
+      mining: {
+        auto: true,      // Keep mining on transactions
+        interval: 5000   // Also mine every 5 seconds
+      }
     },
     localhost: {
       url: "http://127.0.0.1:8545",
